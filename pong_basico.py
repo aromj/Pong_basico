@@ -1,6 +1,7 @@
 import pygame
 import sys
 import random
+import asyncio
 
 #Inicializar Pygame
 pygame.init()
@@ -15,18 +16,25 @@ BLANCO = (255, 255, 255)
 NEGRO = (20, 20, 20)
 AZUL = (50, 150, 255)
 ROJO = (255, 80, 80)
+ESTELA_COLOR = (255, 255, 0)
 
 fuente = pygame.font.Font(None, 60)
 reloj = pygame.time.Clock()
 
 # Sonido
-rebote_sonido = pygame.mixer.Sound("bounce.wav")
-pygame.mixer.music.load("background.mp3")
-pygame.mixer.music.play(-1)
+try:
+    rebote_sonido = pygame.mixer.Sound("bounce.ogg")
+    pygame.mixer.music.load("background.ogg")
+    pygame.mixer.music.play(-1)
+except Exception:
+    pass
 
 # Paletas
 ANCHO_PALETA, ALTO_PALETA = 10, 100
 velocidad_paleta = 7
+
+pelota_rastro = []
+MAX_RASTRO = 15
 
 # Pelota
 TAMANO_PELOTA = 30
@@ -39,7 +47,7 @@ def mostrar_texto(texto, tamaño=60, y_offset=0):
     pantalla.blit(render, rect)
 
 # Pantalla de inicio
-def pantalla_inicio():
+async def pantalla_inicio():
     seleccion = 0
     opciones = ["1. Jugador vs Jugador", "2. Jugador vs IA"]
 
@@ -64,28 +72,31 @@ def pantalla_inicio():
                 elif evento.key == pygame.K_RETURN:
                     return seleccion
 
+        await asyncio.sleep(0)
+
 # Pantalla ganador
-def pantalla_ganador(ganador):
+async def pantalla_ganador(ganador):
     pantalla.fill(NEGRO)
     mostrar_texto(f"¡{ganador} gana!", 60, -40)
     mostrar_texto("Presiona cualquier tecla para jugar otra vez", 40, 40)
     pygame.display.flip()
-    esperar_tecla()
+    await esperar_tecla()
 
 # Esperar una tecla
-def esperar_tecla():
+async def esperar_tecla():
     while True:
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
-                pygame.quite()
+                pygame.quit()
                 sys.exit()
             if evento.type == pygame.KEYDOWN:
                 return
-            
+        await asyncio.sleep(0)
+                       
 # Juego principal
-def main():
+async def main():
     while True:
-        modo = pantalla_inicio()
+        modo = await pantalla_inicio()
         contra_ia = (modo == 1)
 
         paleta_izquierda = pygame.Rect(50, ALTO // 2- ALTO_PALETA // 2, ANCHO_PALETA, ALTO_PALETA)
@@ -95,6 +106,7 @@ def main():
         puntos_izquierda = 0
         puntos_derecha = 0
 
+        
         jugando = True
         while jugando:
             for evento in pygame.event.get():
@@ -126,6 +138,11 @@ def main():
             pelota.x += velocidad_pelota[0]
             pelota.y += velocidad_pelota[1]
 
+            # Rastro
+            pelota_rastro.append(pelota.center)
+            if len(pelota_rastro) > MAX_RASTRO:
+                pelota_rastro.pop(0)
+
             # Colisiones con bordes
             if pelota.top <= 0 or pelota.bottom >= ALTO:
                 velocidad_pelota[1] *= -1
@@ -134,7 +151,10 @@ def main():
             if pelota.colliderect(paleta_izquierda) or pelota.colliderect(paleta_derecha):
                 velocidad_pelota[0] *= -1.1
                 velocidad_pelota[1] *= 1.05
-                rebote_sonido.play()
+                try:
+                    rebote_sonido.play()
+                except Exception:
+                    pass
 
             # Puntos para derecha
             if pelota.left <= 0:
@@ -150,14 +170,22 @@ def main():
 
             # Verificar ganador
             if puntos_izquierda == 5:
-                pantalla_ganador("Jugador 1")
+                await pantalla_ganador("Jugador 1")
                 jugando = False
             elif puntos_derecha == 5:
-                pantalla_ganador("Jugador 2")
+                await pantalla_ganador("Jugador 2")
                 jugando = False
 
-            # Dibujar elementos
             pantalla.fill(NEGRO)
+
+            # DIbujar estela
+            for i, pos in enumerate(pelota_rastro):
+                r = TAMANO_PELOTA // 2
+                intensidad = max(0, 255 - i * 20)
+                color = (ESTELA_COLOR[0], intensidad, intensidad)
+                pygame.draw.circle(pantalla, color, pos, r)
+
+            # Dibujar elementos
             pygame.draw.rect(pantalla, AZUL, paleta_izquierda)
             pygame.draw.rect(pantalla, ROJO, paleta_derecha)
             pygame.draw.ellipse(pantalla, BLANCO, pelota)
@@ -171,6 +199,7 @@ def main():
 
             pygame.display.flip()
             reloj.tick(60)
+            await asyncio.sleep(0)
 
 # Ejecutar juego
-main()
+asyncio.run(main())
